@@ -5103,11 +5103,15 @@ class EnvoyMCPServer:
                             worker._touch_session(sid, label)
                         except Exception:
                             pass
-                token = _SESSION_CTX.set((sid, label))
+                # A save reinitializes this module and rebinds _SESSION_CTX,
+                # and a request still open on the old server must reset the
+                # ContextVar it set, not the new one, or reset() raises.
+                session_ctx = _SESSION_CTX
+                token = session_ctx.set((sid, label))
                 try:
                     await self.app(scope, receive, send)
                 finally:
-                    _SESSION_CTX.reset(token)
+                    session_ctx.reset(token)
 
         starlette_app = _SuppressDisconnect(_SessionCapture(starlette_app))
 
