@@ -2,6 +2,9 @@
 
 Envoy is designed as a **local development tool** — it runs on the loopback interface (`127.0.0.1`) and is intended for use in trusted environments. Understanding its security model is important before deploying it in any shared or networked context.
 
+!!! warning "acie-io fork: Envoy listens on the LAN"
+    In this fork Envoy binds `0.0.0.0`, so any machine on the LAN can reach it without authentication and run Python in TouchDesigner through `execute_python`. The `Host` check admits loopback plus this machine's hostname, `<hostname>.local` and its IPv4 addresses, which still turns away a browser's DNS-rebinding request. The rest of this page describes upstream Embody.
+
 ## Local-Only by Design
 
 Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface, and it validates `Host` and `Origin` headers on every request with explicit MCP SDK `TransportSecuritySettings`. This means:

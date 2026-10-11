@@ -23,6 +23,8 @@
 
 ---
 
+> **acie-io fork.** Envoy listens on every interface (`0.0.0.0`), so an MCP client on another machine on the LAN can connect to `http://<hostname>.local:9870/mcp`. It has no authentication: anyone on the LAN can drive TouchDesigner through it. See [docs/envoy/security.md](docs/envoy/security.md). Upstream is [dylanroscover/Embody](https://github.com/dylanroscover/Embody).
+
 Embody puts your ideas on screen as fast as you can describe them. Operators, connections, parameters, the works. Want to try a different direction? Spin up a new approach in seconds. Compare attempts side by side. Branch off the one that works. **The tool keeps up with you, instead of the other way around.**
 
 ## Four Tools, One Idea

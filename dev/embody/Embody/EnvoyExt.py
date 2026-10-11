@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,24 @@ from threading import Lock, Event, Thread, get_ident
 from typing import Optional, Any, Callable, Literal
 
 ENVOY_VERSION = "1.4.0"
+
+# acie-io fork: Envoy listens on every interface, so an MCP client on
+# another machine on the LAN reaches it by this machine's name or address.
+# There is still no authentication; the Host check below admits only this
+# machine's own names, which keeps a browser's DNS-rebinding request out.
+_BIND_HOST = '0.0.0.0'
+
+
+def _lan_hosts() -> list:
+    """Host-header patterns for this machine as the LAN sees it: its
+    hostname, hostname.local and its IPv4 addresses, on any port."""
+    name = socket.gethostname().lower()
+    hosts = {name, f'{name}.local'}
+    try:
+        hosts.update(socket.gethostbyname_ex(name)[2])
+    except OSError:
+        pass
+    return [f'{host}:*' for host in sorted(hosts)]
 
 # Per-request session identity, set by the ASGI middleware from the
 # X-Envoy-Session / X-Envoy-Label headers the bridge sends. anyio's
@@ -1547,7 +1566,12 @@ class EnvoyMCPServer:
             from mcp.server.transport_security import TransportSecuritySettings
             self._transport_security = TransportSecuritySettings(
                 enable_dns_rebinding_protection=True,
-                allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+                allowed_hosts=[
+                    "127.0.0.1:*",
+                    "localhost:*",
+                    "[::1]:*",
+                    *_lan_hosts(),
+                ],
                 allowed_origins=[
                     "http://127.0.0.1:*",
                     "http://localhost:*",
@@ -5089,7 +5113,7 @@ class EnvoyMCPServer:
 
         config = uvicorn.Config(
             starlette_app,
-            host="127.0.0.1",
+            host=_BIND_HOST,
             port=self.port,
             log_level="warning",
             # TD replaces sys.stdout with a Textport catcher, and some builds
@@ -5681,13 +5705,16 @@ class EnvoyExt:
         def _port_bindable(port: int) -> bool:
             # Mirror uvicorn's bind exactly (plain bind, no SO_REUSEADDR) so
             # the answer predicts the real startup outcome -- including
-            # zombie-held and TIME_WAIT-blocked ports.
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.bind(('127.0.0.1', port))
-                    return True
-                except OSError:
-                    return False
+            # zombie-held and TIME_WAIT-blocked ports. Loopback is probed as
+            # well, so a port another process holds on loopback alone, where
+            # local clients connect, still reads as taken.
+            for host in ('127.0.0.1', _BIND_HOST):
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    try:
+                        s.bind((host, port))
+                    except OSError:
+                        return False
+            return True
 
         def _recent_bind_failure(port: int) -> bool:
             bad = getattr(sys, '_envoy_bad_bind_ports', None)
